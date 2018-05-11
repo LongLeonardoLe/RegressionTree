@@ -127,6 +127,10 @@ class RegressionTree:
             return self.right.predict(instance)
 
     def number_of_leaves(self):
+        """
+        Calculate the number of leaves in the tree
+        :return: number of leaves: int
+        """
         if self.left is None and self.right is None:
             return 1
         return self.left.number_of_leaves() + self.right.number_of_leaves()
