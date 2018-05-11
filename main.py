@@ -1,24 +1,26 @@
 import random
 import numpy as np
+import RegressionTree as rt
 
 
 def preprocess_data(file_name):
     """
-    preprocess data into an array
+    preprocess data into a numpy darray
     :param: file_name: string
-    :return: numpy array
+    :return: first_line: list[], numpy darray
     """
     output = []
     with open(file_name, 'r') as in_file:
+        first_line = in_file.readline().strip('\n').split(',')
         output.extend(setup_vector(x.strip('\n')) for x in in_file)
-    return np.array(output, float)
+    return first_line, np.array(output, float)
 
 
 def setup_vector(input_line):
     """
     comma-based split each input line
     :param input_line: string
-    :return:
+    :return: tuple
     """
     vector = input_line.split(',')
     for i in range(len(vector)):
@@ -35,6 +37,7 @@ def setup_vector(input_line):
     result = [float(x) for x in vector]
     return tuple(result)
 
+
 def split_train_test(data, rationale):
     """
     split the data into training and testing data with |test| = rationale*|data|
@@ -45,14 +48,73 @@ def split_train_test(data, rationale):
     test = []
     test_size = int(len(data)*rationale)
     for i in range(test_size):
-        r_index = random.randrange(len(train))
-        test.append(train[r_index])
-        train = np.delete(train, r_index, 0)
+        # r_index = random.randrange(len(train))
+        test.append(train[i])
+        train = np.delete(train, i, 0)
     return train, test
 
 
+def calc_mse(train_set, test_set, names, st_const):
+    """
+    Build the regression tree with the training set
+    Calculate the Mean Squared Error of the training and testing set
+    :param train_set: training set
+    :param test_set: testing set
+    :param names: list of variable names
+    :param st_const: the percentage to determine the stopping condition
+    :return: training MSE, testing MSE
+    """
+    tree = rt.RegressionTree(train_set, names, int(st_const*len(train)), pruning=False)
+    tree.recursive_binary_split()
+    print(tree.number_of_leaves())
+    train_mse = []
+    test_mse = []
+    for instance in train_set:
+        res = tree.predict(instance)
+        train_mse.append((res-instance[0])**2)
+    for instance in test_set:
+        res = tree.predict(instance)
+        test_mse.append((res-instance[0])**2)
+    return np.mean(np.array(train_mse)), np.mean(np.array(test_mse))
+
+
+def bagging(train_set, test_set, bagged_number, bagged_size, st_const, names):
+    """
+    Bagging Regression Tree
+    :param train_set: training set
+    :param test_set: testing set
+    :param bagged_number: the number of bagging regression trees
+    :param bagged_size: size for each bootstrapped training set
+    :param st_const: the percentage to determine the stopping condition
+    :param names: list of variable names
+    :return: array of the means of predictions
+    """
+    idx_list = np.arange(len(train_set))
+    prediction_list = []
+    for i in range(bagged_number):
+        sample_idx = np.random.choice(idx_list, bagged_size, replace=True)
+        sample = []
+        for idx in sample_idx:
+            sample.append(train[idx])
+        sample = np.array(sample, float)
+        subtree = rt.RegressionTree(sample, names, int(st_const*len(sample)), pruning=False)
+        subtree.recursive_binary_split()
+        prediction_i = []
+        for instance in test_set:
+            prediction_i.append(subtree.predict(instance))
+        prediction_list.append(prediction_i)
+    prediction_list = np.mean(np.array(prediction_list, float), axis=0)
+    test_mse = []
+    for i in range(len(test_set)):
+        test_mse.append(((prediction_list[i]-test_set[i][0]))**2)
+    return np.mean(np.array(test_mse))
+
+
 if __name__ == "__main__":
-    data = preprocess_data("Carseats.csv")
+    var_names, data = preprocess_data("Carseats.csv")
     print(len(data))
     train, test = split_train_test(data, 0.1)
     print(len(train), len(test))
+    stop_const = 0.025
+    print(calc_mse(train, test, var_names, stop_const))
+    print(np.mean(bagging(train, test, bagged_number=50, bagged_size=100, st_const=0.1, names=var_names)))
